@@ -195,7 +195,7 @@ jobs:
 
           ## Manual repository setup (not possible from a workflow)
 
-          - [ ] Settings -> General: allow **squash merging only**, enable **automatically delete head branches**, disable wiki and projects, set the homepage to \`https://esphome.io\` and add a description.
+          - [ ] Settings -> General: allow **squash merging only**, enable **automatically delete head branches**, disable wiki and projects, set the homepage to \`https://esphome.io/projects/?type=<type>\` — where \`<type>\` is this project's filter on the projects page: \`voice\`, \`bluetooth\`, \`media\`, \`irrf\` (infrared and RF proxies) or \`empty\` (generic/esphome-web devices) — and add a description.
           - [ ] Settings -> Advanced Security: enable **secret scanning** and **push protection**.
           - [ ] Settings -> Rules -> Rulesets -> New ruleset -> Import a ruleset: import both JSON files from [\`.github/rulesets/\`](https://github.com/${REPO}/tree/main/.github/rulesets) — **Default protection** (branch: require PRs, squash only, linear history, block force pushes/deletion) and **Block release publishing** (tag: block tag create/update/delete, with a bypass for the ESPHome GitHub App).
           - [ ] Settings -> Environments: create the \`release\` environment (with required reviewers as appropriate); \`release.yml\` runs in it.

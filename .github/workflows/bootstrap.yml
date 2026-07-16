@@ -1,0 +1,254 @@
+name: Bootstrap
+
+# One-shot workflow that runs when a new repository is generated from the
+# ready-made-project-template template repository. It personalizes the repo
+# based on its name (replaces template placeholder strings, renames the
+# README, deletes template-only files including this workflow) and opens a
+# pull request with the result. It never runs in the template repo itself,
+# and becomes a no-op once the bootstrap PR has been merged.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  bootstrap:
+    name: Initialize repository from template
+    # Never run in the template repository itself.
+    if: github.event.repository.name != 'ready-made-project-template'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Check whether bootstrap is needed
+        id: check
+        run: |
+          set -euo pipefail
+          if [[ -f README.template.md ]]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "README.template.md not found — repository already bootstrapped; nothing to do."
+          fi
+
+      # The ESPHome GitHub App token is required (not GITHUB_TOKEN): the PR
+      # needs to delete this workflow file (GITHUB_TOKEN is refused pushes
+      # that modify .github/workflows/), and PRs created with GITHUB_TOKEN
+      # do not trigger CI workflows. The client ID is an org-level variable
+      # available to every repository, but the private key secret is only
+      # shared with an explicit list of repositories — fail with clear
+      # instructions until this repo has been added to that list.
+      - name: Check ESPHome GitHub App credentials
+        if: steps.check.outputs.needed == 'true'
+        env:
+          CLIENT_ID: ${{ vars.ESPHOME_GITHUB_APP_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.ESPHOME_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLIENT_ID}" ]]; then
+            message="The ESPHOME_GITHUB_APP_CLIENT_ID organization variable is not available to this repository."
+            echo "::error::${message}"
+            echo "> [!CAUTION]" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ${message}" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [[ -z "${PRIVATE_KEY}" ]]; then
+            message="The ESPHOME_GITHUB_APP_PRIVATE_KEY organization secret is not available to this repository. An organization admin needs to add this repository to the secret's repository access list, then re-run the failed jobs of this workflow."
+            echo "::error::${message}"
+            echo "> [!CAUTION]" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ${message}" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "ESPHome GitHub App credentials are available."
+
+      - name: Generate app token
+        id: app-token
+        if: steps.check.outputs.needed == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.ESPHOME_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ESPHOME_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Derive project names
+        id: names
+        if: steps.check.outputs.needed == 'true'
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          # Set a `FIRMWARE_DIRECTORY` repository variable before running
+          # (or re-running) this workflow to override the derived default.
+          OVERRIDE_DIRECTORY: ${{ vars.FIRMWARE_DIRECTORY }}
+        run: |
+          set -euo pipefail
+          # Human title: hyphens to spaces, each word capitalized.
+          # e.g. rf-proxies -> "Rf Proxies" (fix up capitalization in the PR if needed)
+          title=$(echo "${REPO_NAME}" | sed -e 's/-/ /g' -e 's/\b\(.\)/\u\1/g')
+
+          # firmware.esphome.io directory: singularized repository name.
+          # e.g. rf-proxies -> rf-proxy, media-players -> media-player
+          directory="${OVERRIDE_DIRECTORY}"
+          if [[ -z "${directory}" ]]; then
+            if [[ "${REPO_NAME}" == *ies ]]; then
+              directory="${REPO_NAME%ies}y"
+            else
+              directory="${REPO_NAME%s}"
+            fi
+          fi
+
+          echo "title=${title}" >> "$GITHUB_OUTPUT"
+          echo "directory=${directory}" >> "$GITHUB_OUTPUT"
+          echo "Repository: ${REPO_NAME}"
+          echo "Title: ${title}"
+          echo "Firmware directory: ${directory}"
+
+      - name: Replace template placeholders
+        if: steps.check.outputs.needed == 'true'
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          TITLE: ${{ steps.names.outputs.title }}
+          DIRECTORY: ${{ steps.names.outputs.directory }}
+        run: |
+          set -euo pipefail
+          # Placeholders only exist outside .github/workflows/ by design, so
+          # the fallback GITHUB_TOKEN path never has to push workflow changes.
+          files=$(grep -rIl --exclude-dir=.git --exclude-dir=workflows \
+            -e 'TEMPLATE-REPO-OWNER' \
+            -e 'TEMPLATE-REPO-NAME' \
+            -e 'TEMPLATE-FIRMWARE-DIR' \
+            -e 'TEMPLATE-PROJECT-TITLE' \
+            . || true)
+          if [[ -z "${files}" ]]; then
+            echo "No files with template placeholders found"
+          else
+            while IFS= read -r file; do
+              echo "Updating ${file}"
+              sed -i \
+                -e "s|TEMPLATE-REPO-OWNER|${REPO_OWNER}|g" \
+                -e "s|TEMPLATE-REPO-NAME|${REPO_NAME}|g" \
+                -e "s|TEMPLATE-FIRMWARE-DIR|${DIRECTORY}|g" \
+                -e "s|TEMPLATE-PROJECT-TITLE|${TITLE}|g" \
+                "${file}"
+            done <<< "${files}"
+          fi
+
+      - name: Remove template-only files
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          set -euo pipefail
+          # The template's own README documents the template; the real README
+          # for the generated repository ships as README.template.md.
+          rm README.md
+          mv README.template.md README.md
+
+      - name: Remove bootstrap workflow
+        if: steps.check.outputs.needed == 'true'
+        run: rm .github/workflows/bootstrap.yml
+
+      - name: Create labels used by release-drafter
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh label create "breaking-change" --repo "${{ github.repository }}" --color "B60205" --description "A breaking change" --force
+          gh label create "new-device" --repo "${{ github.repository }}" --color "0E8A16" --description "Adds support for a new device" --force
+          gh label create "bugfix" --repo "${{ github.repository }}" --color "D73A4A" --description "Fixes a bug" --force
+          gh label create "dependencies" --repo "${{ github.repository }}" --color "0366D6" --description "Dependency updates" --force
+          gh label create "keep-open" --repo "${{ github.repository }}" --color "FBCA04" --description "Exempt from being locked" --force
+          gh label create "not-stale" --repo "${{ github.repository }}" --color "FBCA04" --description "Exempt from being marked stale" --force
+
+      - name: Compose pull request body
+        if: steps.check.outputs.needed == 'true'
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          TITLE: ${{ steps.names.outputs.title }}
+          DIRECTORY: ${{ steps.names.outputs.directory }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/pr-body.md"
+          cat > "${body}" <<EOF
+          This PR initializes the repository from the ready-made-project-template.
+
+          ## Applied automatically
+
+          - Replaced template placeholders:
+            - Repository name: \`${REPO_NAME}\`
+            - Project title: \`${TITLE}\`
+            - Firmware directory (firmware.esphome.io): \`${DIRECTORY}\`
+          - Renamed \`README.template.md\` to \`README.md\`
+          - Created the labels used by release-drafter, lock and stale
+
+          ## Review before merging
+
+          - [ ] The firmware directory \`${DIRECTORY}\` is correct — it is used in the \`update.source\` URLs and derived again at publish time in \`publish.yml\`. To use a different value, set a \`FIRMWARE_DIRECTORY\` repository variable and update the \`update.source\` URLs in this PR.
+          - [ ] The project title \`${TITLE}\` reads correctly (fix capitalization of acronyms in the README, issue template and devcontainer).
+          - [ ] Update the README description for this project's purpose.
+
+          ## Manual repository setup (not possible from a workflow)
+
+          - [ ] Settings -> General: allow **squash merging only**, enable **automatically delete head branches**, disable wiki and projects, set the homepage to \`https://esphome.io\` and add a description.
+          - [ ] Settings -> Advanced Security: enable **secret scanning** and **push protection**.
+          - [ ] Settings -> Rules: add the **Default protection** branch ruleset (require PRs, squash only, linear history, block force pushes/deletion) and the **Block release publishing** tag ruleset (block tag create/update/delete, with a bypass for the ESPHome GitHub App) — copy them from an existing ready-made repo such as rf-proxies.
+          - [ ] Settings -> Environments: create the \`release\` environment (with required reviewers as appropriate); \`release.yml\` runs in it.
+          - [ ] Verify the Cloudflare R2 organization secrets are shared with this repository: \`CLOUDFLARE_R2_ACCOUNT_ID\`, \`CLOUDFLARE_R2_ACCESS_KEY_ID\`, \`CLOUDFLARE_R2_SECRET_ACCESS_KEY\`, \`CLOUDFLARE_R2_BUCKET\` — \`publish.yml\` passes them to the reusable esphome/workflows via \`secrets: inherit\`.
+          - [ ] Replace \`example-device/\` with the real device configurations and update the \`files:\` list in \`.github/workflows/build.yml\`.
+          EOF
+
+          cat >> "${body}" <<'EOF'
+
+          ## Required secrets and variables
+
+          | Name                              | Kind         | Used by                                           |
+          | --------------------------------- | ------------ | ------------------------------------------------- |
+          | `ESPHOME_GITHUB_APP_CLIENT_ID`    | Org variable | `release.yml`, `bootstrap.yml` (already verified) |
+          | `ESPHOME_GITHUB_APP_PRIVATE_KEY`  | Org secret   | `release.yml`, `bootstrap.yml` (already verified) |
+          | `CLOUDFLARE_R2_ACCOUNT_ID`        | Org secret   | `publish.yml` via esphome/workflows               |
+          | `CLOUDFLARE_R2_ACCESS_KEY_ID`     | Org secret   | `publish.yml` via esphome/workflows               |
+          | `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Org secret   | `publish.yml` via esphome/workflows               |
+          | `CLOUDFLARE_R2_BUCKET`            | Org secret   | `publish.yml` via esphome/workflows               |
+          EOF
+
+      - name: Create pull request
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.repository.default_branch }}
+          TITLE: Initialize ${{ github.event.repository.name }} from template
+        run: |
+          set -euo pipefail
+          branch="initialize-from-template"
+
+          # Commit as the GitHub App bot user
+          user_id=$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq '.id')
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git checkout -B "${branch}"
+          git add -A
+          git commit -m "Initialize repository from template"
+
+          # Push with the app token: the credentials persisted by checkout
+          # are the default GITHUB_TOKEN, which is refused pushes that
+          # modify .github/workflows/ (this commit deletes bootstrap.yml).
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git push --force origin "${branch}"
+
+          # Update the existing PR when re-run, otherwise create it.
+          pr=$(gh pr list --repo "${REPO}" --head "${branch}" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "${pr}" ]]; then
+            gh pr edit "${pr}" --repo "${REPO}" --title "${TITLE}" --body-file "${RUNNER_TEMP}/pr-body.md"
+            echo "Updated existing pull request #${pr}"
+          else
+            gh pr create --repo "${REPO}" --base "${BASE}" --head "${branch}" \
+              --title "${TITLE}" --body-file "${RUNNER_TEMP}/pr-body.md"
+          fi

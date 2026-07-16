@@ -20,9 +20,12 @@ jobs:
     # Never run in the template repository itself.
     if: github.event.repository.name != 'ready-made-project-template'
     runs-on: ubuntu-latest
+    # The push and pull request are made with the ESPHome GitHub App token
+    # (see the comment above "Check ESPHome GitHub App credentials"); the
+    # default GITHUB_TOKEN is only used to check out the repository and to
+    # create labels.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       issues: write
     steps:
       - name: Check out repository
@@ -76,6 +79,12 @@ jobs:
         with:
           client-id: ${{ vars.ESPHOME_GITHUB_APP_CLIENT_ID }}
           private-key: ${{ secrets.ESPHOME_GITHUB_APP_PRIVATE_KEY }}
+          # Scope the token to what this job does: push the bootstrap branch
+          # (contents), including the deletion of this workflow file
+          # (workflows), and open the pull request (pull-requests).
+          permission-contents: write
+          permission-workflows: write
+          permission-pull-requests: write
 
       - name: Derive project names
         id: names
@@ -117,8 +126,8 @@ jobs:
           DIRECTORY: ${{ steps.names.outputs.directory }}
         run: |
           set -euo pipefail
-          # Placeholders only exist outside .github/workflows/ by design, so
-          # the fallback GITHUB_TOKEN path never has to push workflow changes.
+          # Placeholders intentionally never appear under .github/workflows/,
+          # so skip that directory entirely.
           files=$(grep -rIl --exclude-dir=.git --exclude-dir=workflows \
             -e 'TEMPLATE-REPO-OWNER' \
             -e 'TEMPLATE-REPO-NAME' \

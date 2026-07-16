@@ -79,6 +79,12 @@ jobs:
         with:
           client-id: ${{ vars.ESPHOME_GITHUB_APP_CLIENT_ID }}
           private-key: ${{ secrets.ESPHOME_GITHUB_APP_PRIVATE_KEY }}
+          # Scope the token to what this job does: push the bootstrap branch
+          # (contents), including the deletion of this workflow file
+          # (workflows), and open the pull request (pull-requests).
+          permission-contents: write
+          permission-workflows: write
+          permission-pull-requests: write
 
       - name: Derive project names
         id: names

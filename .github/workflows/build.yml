@@ -29,8 +29,10 @@ jobs:
         run: |
           set -euo pipefail
           # By convention every device ships a <device>/<device>.factory.yaml;
-          # anything matching *.factory.yaml outside hidden directories is built.
-          files=$(find . -name '*.factory.yaml' -not -path '*/.*' | sed 's|^\./||' | sort)
+          # anything matching *.factory.yaml outside hidden directories is
+          # built. Prune dot-directories (.git, .github) rather than just
+          # filtering them from the results, so find never descends into them.
+          files=$(find . -path '*/.*' -prune -o -name '*.factory.yaml' -print | sed 's|^\./||' | sort)
           if [[ -z "${files}" ]]; then
             echo "::error::No *.factory.yaml files found"
             exit 1

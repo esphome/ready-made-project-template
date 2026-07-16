@@ -16,6 +16,8 @@ This is a [GitHub template repository](https://docs.github.com/en/repositories/c
 
 To override the derived firmware directory, set a `FIRMWARE_DIRECTORY` repository variable **before** the bootstrap workflow runs (or set it afterwards and fix the `update.source` URLs in the bootstrap PR — [publish.yml](.github/workflows/publish.yml) reads the variable at publish time).
 
+The manual-setup checklist includes setting the repository homepage. The convention is `https://esphome.io/projects/?type=<type>`, where `<type>` is the project's filter value on the projects page: `voice`, `bluetooth`, `media`, `irrf` (shared by infrared and RF proxies) or `empty` (generic/esphome-web devices). This template repository itself uses the unfiltered `https://esphome.io/projects/`.
+
 ## Template placeholders
 
 Placeholders only appear **outside** `.github/workflows/` — workflow files need no substitution, since `publish.yml` derives the firmware directory at runtime. This keeps the bootstrap commit free of workflow-file edits apart from deleting `bootstrap.yml` itself, which is why the ESPHome GitHub App token is required (the default `GITHUB_TOKEN` is refused pushes that modify `.github/workflows/`, and PRs it creates do not trigger CI).

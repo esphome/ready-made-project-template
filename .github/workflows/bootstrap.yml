@@ -168,6 +168,7 @@ jobs:
       - name: Compose pull request body
         if: steps.check.outputs.needed == 'true'
         env:
+          REPO: ${{ github.repository }}
           REPO_NAME: ${{ github.event.repository.name }}
           TITLE: ${{ steps.names.outputs.title }}
           DIRECTORY: ${{ steps.names.outputs.directory }}
@@ -196,7 +197,7 @@ jobs:
 
           - [ ] Settings -> General: allow **squash merging only**, enable **automatically delete head branches**, disable wiki and projects, set the homepage to \`https://esphome.io\` and add a description.
           - [ ] Settings -> Advanced Security: enable **secret scanning** and **push protection**.
-          - [ ] Settings -> Rules: add the **Default protection** branch ruleset (require PRs, squash only, linear history, block force pushes/deletion) and the **Block release publishing** tag ruleset (block tag create/update/delete, with a bypass for the ESPHome GitHub App) — copy them from an existing ready-made repo such as rf-proxies.
+          - [ ] Settings -> Rules -> Rulesets -> New ruleset -> Import a ruleset: import both JSON files from [\`.github/rulesets/\`](https://github.com/${REPO}/tree/main/.github/rulesets) — **Default protection** (branch: require PRs, squash only, linear history, block force pushes/deletion) and **Block release publishing** (tag: block tag create/update/delete, with a bypass for the ESPHome GitHub App).
           - [ ] Settings -> Environments: create the \`release\` environment (with required reviewers as appropriate); \`release.yml\` runs in it.
           - [ ] Verify the Cloudflare R2 organization secrets are shared with this repository: \`CLOUDFLARE_R2_ACCOUNT_ID\`, \`CLOUDFLARE_R2_ACCESS_KEY_ID\`, \`CLOUDFLARE_R2_SECRET_ACCESS_KEY\`, \`CLOUDFLARE_R2_BUCKET\` — \`publish.yml\` passes them to the reusable esphome/workflows via \`secrets: inherit\`.
           - [ ] Replace \`example-device/\` with the real device configurations and update the \`files:\` list in \`.github/workflows/build.yml\`.

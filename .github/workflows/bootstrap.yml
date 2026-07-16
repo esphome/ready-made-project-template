@@ -200,7 +200,7 @@ jobs:
           - [ ] Settings -> Rules -> Rulesets -> New ruleset -> Import a ruleset: import both JSON files from [\`.github/rulesets/\`](https://github.com/${REPO}/tree/main/.github/rulesets) — **Default protection** (branch: require PRs, squash only, linear history, block force pushes/deletion) and **Block release publishing** (tag: block tag create/update/delete, with a bypass for the ESPHome GitHub App).
           - [ ] Settings -> Environments: create the \`release\` environment (with required reviewers as appropriate); \`release.yml\` runs in it.
           - [ ] Verify the Cloudflare R2 organization secrets are shared with this repository: \`CLOUDFLARE_R2_ACCOUNT_ID\`, \`CLOUDFLARE_R2_ACCESS_KEY_ID\`, \`CLOUDFLARE_R2_SECRET_ACCESS_KEY\`, \`CLOUDFLARE_R2_BUCKET\` — \`publish.yml\` passes them to the reusable esphome/workflows via \`secrets: inherit\`.
-          - [ ] Replace \`example-device/\` with the real device configurations and update the \`files:\` list in \`.github/workflows/build.yml\`.
+          - [ ] Replace \`example-device/\` with the real device configurations — \`build.yml\` builds every \`*.factory.yaml\` in the repository automatically.
           EOF
 
           cat >> "${body}" <<'EOF'

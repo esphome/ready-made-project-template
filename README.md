@@ -12,7 +12,7 @@ This is a [GitHub template repository](https://docs.github.com/en/repositories/c
    - deletes the bootstrap workflow itself,
    - creates the labels used by release-drafter, lock and stale.
 4. Review and merge the bootstrap PR, then work through its **manual repository setup** checklist (branch/tag rulesets, `release` environment, squash-only merges, secret scanning, etc.). The rulesets ship as importable JSON in [.github/rulesets/](.github/rulesets/): **Settings -> Rules -> Rulesets -> New ruleset -> Import a ruleset**.
-5. Replace `example-device/` with real device configurations and update the `files:` list in [build.yml](.github/workflows/build.yml).
+5. Replace `example-device/` with real device configurations. [build.yml](.github/workflows/build.yml) discovers every `*.factory.yaml` in the repository automatically — no workflow edits needed when adding or removing devices.
 
 To override the derived firmware directory, set a `FIRMWARE_DIRECTORY` repository variable **before** the bootstrap workflow runs (or set it afterwards and fix the `update.source` URLs in the bootstrap PR — [publish.yml](.github/workflows/publish.yml) reads the variable at publish time).
 
